@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Git-based Azure Deployment Script for MOM Web Application
-# This approach is more reliable and avoids Kudu warming issues
+# Standalone Azure Deployment Script for MOM Web Application
+# Only deploys the necessary standalone files to avoid large Git pushes
 
 set -e
 
-echo "🚀 Git-based Azure Deployment for MOM Web Application"
-echo "====================================================="
+echo "🚀 Standalone Azure Deployment for MOM Web Application"
+echo "======================================================"
 
 # Check if Azure CLI is installed
 if ! command -v az &> /dev/null; then
@@ -66,44 +66,33 @@ az webapp log config --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --web
 echo "🔨 Building application..."
 npm run build
 
-echo "📤 Setting up Git deployment..."
-# Get the Git URL
-GIT_URL=$(az webapp deployment source config-local-git --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --query url --output tsv)
+echo "📤 Creating minimal deployment package..."
+# Create a clean deployment directory with only necessary files
+mkdir -p .azure/standalone-deploy
 
-echo "   Git URL: $GIT_URL"
+# Copy only the standalone files
+cp -r .next/standalone/* .azure/standalone-deploy/
+cp -r public .azure/standalone-deploy/
+cp package.json .azure/standalone-deploy/
+cp next.config.js .azure/standalone-deploy/
+cp web.config .azure/standalone-deploy/
 
-# Initialize git if not already done
-if [ ! -d ".git" ]; then
-    echo "   Initializing Git repository..."
-    git init
-    git branch -M master
-else
-    # Ensure we have a proper branch
-    if ! git branch --show-current &> /dev/null; then
-        echo "   Creating master branch..."
-        git checkout -b master
-    fi
-fi
+# Create a minimal .gitignore for the deployment
+echo "node_modules/" > .azure/standalone-deploy/.gitignore
+echo ".git/" >> .azure/standalone-deploy/.gitignore
 
-# Add all files
-echo "   Adding files to Git..."
-git add .
+echo "🚀 Deploying using zip method (faster than Git)..."
+# Create zip file
+cd .azure/standalone-deploy
+zip -r ../standalone-deployment.zip .
+cd ../..
 
-# Commit changes
-echo "   Committing changes..."
-git commit -m "Deploy to Azure" || git commit -m "Deploy to Azure" --allow-empty
+# Deploy using zip method
+echo "📦 Uploading deployment package..."
+az webapp deployment source config-zip --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --src .azure/standalone-deployment.zip
 
-# Add Azure as remote (remove if exists)
-echo "   Setting up Azure remote..."
-git remote remove azure 2>/dev/null || true
-git remote add azure $GIT_URL
-
-echo "🚀 Deploying to Azure via Git..."
-# Get the current branch name
-CURRENT_BRANCH=$(git branch --show-current)
-echo "   Current branch: $CURRENT_BRANCH"
-# Push to the current branch
-git push azure $CURRENT_BRANCH --force
+# Clean up
+rm -rf .azure/standalone-deploy .azure/standalone-deployment.zip
 
 echo ""
 echo "✅ Deployment completed successfully!"
