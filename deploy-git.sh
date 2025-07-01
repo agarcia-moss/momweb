@@ -76,6 +76,7 @@ echo "   Git URL: $GIT_URL"
 if [ ! -d ".git" ]; then
     echo "   Initializing Git repository..."
     git init
+    git branch -M master
 fi
 
 # Add all files
@@ -92,7 +93,8 @@ git remote remove azure 2>/dev/null || true
 git remote add azure $GIT_URL
 
 echo "🚀 Deploying to Azure via Git..."
-git push azure main --force
+# Try master branch first, then main if that fails
+git push azure master --force || git push azure main --force
 
 echo ""
 echo "✅ Deployment completed successfully!"
